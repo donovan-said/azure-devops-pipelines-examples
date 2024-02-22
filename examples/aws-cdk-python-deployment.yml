@@ -1,0 +1,83 @@
+# The purpose of this pipeline is to manage the deployment of CDK applications
+
+trigger: none
+
+pool:
+  vmImage: "ubuntu-latest"
+
+parameters:
+  - name: environment
+    default: "Dev"
+    type: string
+    displayName: "Environment"
+    values:
+      - "Dev"
+      - "Test"
+      - "Prod"
+
+  - name: stack
+    type: string
+    default: "sample_app_stack_a"
+    displayName: "CDK Stack"
+    values:
+      - "sample_app_stack_a"
+      - "sample_app_stack_b"
+      - "sample_shared_stack_a"
+      - "sample_shared_stack_b"
+
+  - name: action
+    type: string
+    default: "diff"
+    displayName: "CDK Action"
+    values:
+      - "diff"
+      - "deploy"
+
+variables:
+  - name: ADO_PIPELINE_RUN_ID
+    value: $(Build.BuildNumber)
+  - name: BRANCH_NAME
+    value: $(Build.SourceBranch)
+  - name: COMMIT_ID
+    value: $(Build.SourceVersion)
+
+  # This is assuming that the cdk apps have been separated depending on their
+  # purpose
+  - name: CDK_RESOURCE_PATH
+    ${{ if or(eq( parameters['stack'], 'sample_shared_stack_a' ), eq( parameters['stack'], 'sample_shared_stack_b' )) }}:
+      value: cdk/shared/${{ lower(parameters.stack) }}
+    ${{ if or(eq( parameters['stack'], 'sample_app_stack_a' ), eq( parameters['stack'], 'sample_app_stack_b' )) }}:
+      value: cdk/apps/${{ lower(parameters.stack) }}
+
+jobs:
+  - job: CDK_Infra_Management
+    displayName: Deploy CDK Infrastructure
+    steps:
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: "3.9"
+          architecture: "x64"
+        displayName: "Configure Python3.9"
+
+      - bash: |
+          npm install -g aws-cdk
+          sudo apt-get install jq
+          pip install pipenv
+          pipenv requirements > requirements.txt
+          pip install -r requirements.txt
+        displayName: "Install CDK dependencies"
+
+      - task: # Authentications Task
+        # This depends on your use case
+
+      - bash: |
+          cd $(CDK_RESOURCE_PATH)
+          cdk synth
+          if [ ${{ parameters.action }} == "deploy" ]
+          then
+            cdk ${{ parameters.action }} --all --require-approval never
+          else
+            cdk ${{ parameters.action }}
+          fi
+        condition: succeeded()
+        displayName: "Performing CDK: ${{ parameters.action }} for ${{ parameters.stack }} Stack."
