@@ -1,0 +1,49 @@
+# The purpose of this pipeline is to deploy/update a Cloudformation Stack.
+
+trigger: none
+
+pool:
+  vmImage: "ubuntu-latest"
+
+parameters:
+  - name: environment
+    default: "Dev"
+    type: string
+    displayName: "Environment"
+    values:
+      - "Dev"
+      - "Test"
+      - "Prod"
+
+variables:
+  - ${{ if eq( parameters['environment'], 'Dev') }}:
+      - group: # Development varibale group name
+  - ${{ if eq( parameters['environment'], 'Test') }}:
+      - group: # Test varibale group name
+  - ${{ if eq( parameters['environment'], 'Prod') }}:
+      - group: # Production varibale group name
+
+jobs:
+  - job: Deploy_Cloudformation_Stack
+    steps:
+      - task: # Authentications Task
+        # This depends on your use case
+
+      - task: CloudFormationCreateOrUpdateStack@1
+        inputs:
+          regionName: $(AWS_REGION)
+          stackName: "${{ parameters.action }}-sample-cloudformation-stack"
+          templateSource: "file"
+          templateFile: ./sample-cloudformation-template.yaml
+          capabilityNamedIAM: true
+          templateParametersSource: "inline"
+          templateParameters: |
+            - ParameterKey: TrustedAccounts
+              ParameterValue: '$(VAR_ACCOUNT_ID)'
+            - ParameterKey: PermissionsBoundaryPolicy
+              ParameterValue: 'arn:aws:iam::$(VAR_ACCOUNT_ID):policy/$(VAR_PERMISSIONS_BOUNDARY)'
+            - ParameterKey: CloudFormationExecutionPolicies
+              ParameterValue: 'arn:aws:iam::$(VAR_ACCOUNT_ID):policy/$(VAR_DEPLOYMENT_POLICY)'
+            - ParameterKey: FileAssetsBucketName
+              ParameterValue: '$(VAR_FILE_ASSETS_BUCKET)'
+        displayName: "Deploying Cloudformation Stack"
